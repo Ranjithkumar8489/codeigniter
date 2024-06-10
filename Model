@@ -1,0 +1,57 @@
+class User_model extends CI_Model {
+    
+    public function __construct() {
+        $this->load->database();
+    }
+    
+    public function get_referral_count($parent_id) {
+        $this->db->where('parent_id', $parent_id);
+        return $this->db->count_all_results('users');
+    }
+    
+    public function add_referral($username, $parent_id) {
+        $data = array(
+            'username' => $username,
+            'parent_id' => $parent_id
+        );
+        $this->db->insert('users', $data);
+        
+        // Update referral count for the parent
+        $this->db->set('referral_count', 'referral_count+1', FALSE);
+        $this->db->where('id', $parent_id);
+        $this->db->update('users');
+        
+        return $this->db->insert_id();
+    }
+    
+    public function add_referral_record($user_id, $referred_id) {
+        $data = array(
+            'user_id' => $user_id,
+            'referred_id' => $referred_id
+        );
+        $this->db->insert('referrals', $data);
+    }
+    
+    public function find_new_parent($parent_id) {
+        // Get the user's downline
+        $this->db->select('referred_id');
+        $this->db->where('user_id', $parent_id);
+        $query = $this->db->get('referrals');
+        $downline = $query->result_array();
+        
+        // Check each user in the downline for available referral slots
+        foreach ($downline as $downline_user) {
+            $new_parent_id = $downline_user['referred_id'];
+            if ($this->get_referral_count($new_parent_id) < 3) {
+                return $new_parent_id;
+            } else {
+                // Recursively check the downline of the current downline user
+                $next_parent_id = $this->find_new_parent($new_parent_id);
+                if ($next_parent_id) {
+                    return $next_parent_id;
+                }
+            }
+        }
+        return null; // No available parent found
+    }
+}
